@@ -1,12 +1,22 @@
 import Cocoa
-import Carbon
+import Combine
 
 @main
-class AppDelegate: NSObject, NSApplicationDelegate {
+class AppDelegate: NSObject, NSApplicationDelegate, HotkeyManagerDelegate {
+    
+    // MARK: - Manager Instances
+    private let permissionManager = PermissionManager()
+    private let hotkeyManager = HotkeyManager()
+    private let windowManager = WindowManager()
+    
+    // MARK: - UI Components
+    private var statusItem: NSStatusItem?
+    
+    // MARK: - Lifecycle
     
     override init() {
         super.init()
-        print("=== AppDelegate init called ===")
+        print("=== CapsC AppDelegate init ===")
     }
     
     static func main() {
@@ -16,141 +26,183 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         app.run()
     }
     
-    var statusItem: NSStatusItem?
-    var eventHotKeyRef: EventHotKeyRef?
-    var eventHandler: EventHandlerRef?
-    var f19Pressed = false
-    var monitor: Any?
-    
     func applicationDidFinishLaunching(_ aNotification: Notification) {
-        print("=== CapsC applicationDidFinishLaunching ===")
+        print("=== CapsC launching ===")
+        
         setupStatusItem()
-        requestAccessibilityPermissions()
-        registerGlobalHotkey()
-        print("=== CapsC finished launching ===")
-    }
-    
-    func requestAccessibilityPermissions() {
-        print("Checking accessibility permissions...")
+        setupHotkeyManager()
+        checkAndRequestPermissions()
         
-        // First check without prompting
-        let currentlyEnabled = AXIsProcessTrusted()
-        print("Currently enabled: \(currentlyEnabled)")
-        
-        if !currentlyEnabled {
-            print("Requesting accessibility permissions...")
-            let options: NSDictionary = [kAXTrustedCheckOptionPrompt.takeUnretainedValue() as String: true]
-            let accessEnabled = AXIsProcessTrustedWithOptions(options)
-            print("After prompt - Access enabled: \(accessEnabled)")
-            
-            if !accessEnabled {
-                print("⚠️ Please grant accessibility permissions manually")
-                print("1. Go to: System Settings > Privacy & Security > Accessibility")
-                print("2. Enable: CapsC")
-                print("3. Restart the app")
-            }
-        } else {
-            print("✅ Accessibility permissions already granted!")
-        }
-    }
-    
-    func setupStatusItem() {
-        print("Setting up status item...")
-        statusItem = NSStatusBar.system.statusItem(withLength: NSStatusItem.squareLength)
-        statusItem?.button?.title = "C"
-        
-        let menu = NSMenu()
-        menu.addItem(NSMenuItem(title: "Quit CapsC", action: #selector(quit), keyEquivalent: "q"))
-        statusItem?.menu = menu
-        print("Status item setup complete")
-    }
-    
-    @objc func quit() {
-        NSApplication.shared.terminate(nil)
-    }
-    
-    func registerGlobalHotkey() {
-        print("Registering F19+C hotkey...")
-        
-        monitor = NSEvent.addGlobalMonitorForEvents(matching: [.keyDown, .keyUp]) { event in
-            if event.keyCode == 80 { // F19 key code
-                if event.type == .keyDown {
-                    self.f19Pressed = true
-                    print("F19 pressed")
-                } else if event.type == .keyUp {
-                    self.f19Pressed = false
-                    print("F19 released")
-                }
-            } else if event.keyCode == 8 && event.type == .keyDown && self.f19Pressed { // C key code
-                print("F19+C detected!")
-                self.handleHotKeyPressed()
-            }
-        }
-        
-        print("Global monitor registered for F19+C")
-    }
-    
-    func handleHotKeyPressed() {
-        activateChrome()
-        cycleChromeTabs()
-    }
-    
-    func activateChrome() {
-        let workspace = NSWorkspace.shared
-        let runningApps = workspace.runningApplications
-        
-        for app in runningApps {
-            if app.bundleIdentifier == "com.google.Chrome" {
-                app.activate(options: [.activateAllWindows])
-                break
-            }
-        }
-    }
-    
-    func cycleChromeTabs() {
-        let script = """
-            tell application "Google Chrome"
-                if (count of windows) > 0 then
-                    set currentWindow to front window
-                    set windowCount to count of windows
-                    set currentIndex to 1
-                    
-                    repeat with i from 1 to windowCount
-                        if window i is currentWindow then
-                            set currentIndex to i
-                            exit repeat
-                        end if
-                    end repeat
-                    
-                    set nextIndex to currentIndex + 1
-                    if nextIndex > windowCount then
-                        set nextIndex to 1
-                    end if
-                    
-                    set index of window nextIndex to 1
-                    activate
-                end if
-            end tell
-        """
-        
-        var error: NSDictionary?
-        if let scriptObject = NSAppleScript(source: script) {
-            scriptObject.executeAndReturnError(&error)
-            if let error = error {
-                print("AppleScript error: \(error)")
-            }
-        }
+        print("=== CapsC launched successfully ===")
     }
     
     func applicationWillTerminate(_ aNotification: Notification) {
-        if let monitor = monitor {
-            NSEvent.removeMonitor(monitor)
+        print("=== CapsC terminating ===")
+        hotkeyManager.stopMonitoring()
+    }
+    
+    // MARK: - Setup Methods
+    
+    private func setupStatusItem() {
+        print("Setting up status item...")
+        statusItem = NSStatusBar.system.statusItem(withLength: NSStatusItem.squareLength)
+        statusItem?.button?.title = "⚡"
+        
+        let menu = NSMenu()
+        
+        // Chrome status info
+        let chromeStatusItem = NSMenuItem(title: "Chrome: Checking...", action: nil, keyEquivalent: "")
+        chromeStatusItem.isEnabled = false
+        menu.addItem(chromeStatusItem)
+        
+        // Hotkey info
+        let hotkeyItem = NSMenuItem(title: "Hotkey: ⌘U", action: nil, keyEquivalent: "")
+        hotkeyItem.isEnabled = false
+        menu.addItem(hotkeyItem)
+        
+        menu.addItem(NSMenuItem.separator())
+        
+        // Permission status
+        let permissionStatusItem = NSMenuItem(title: "Permissions: Checking...", action: nil, keyEquivalent: "")
+        permissionStatusItem.isEnabled = false
+        menu.addItem(permissionStatusItem)
+        
+        menu.addItem(NSMenuItem.separator())
+        
+        // Actions
+        menu.addItem(NSMenuItem(title: "Request Permissions", action: #selector(requestPermissions), keyEquivalent: ""))
+        menu.addItem(NSMenuItem(title: "Test Chrome Cycling", action: #selector(testChromeCycling), keyEquivalent: ""))
+        
+        menu.addItem(NSMenuItem.separator())
+        menu.addItem(NSMenuItem(title: "Quit CapsC", action: #selector(quit), keyEquivalent: "q"))
+        
+        statusItem?.menu = menu
+        
+        // Update status periodically
+        Timer.scheduledTimer(withTimeInterval: 2.0, repeats: true) { _ in
+            self.updateStatusMenu()
         }
-        if let eventHandler = eventHandler {
-            RemoveEventHandler(eventHandler)
+        
+        print("Status item setup complete")
+    }
+    
+    private func setupHotkeyManager() {
+        hotkeyManager.delegate = self
+        
+        // Simplified permission check (like old implementation)
+        let hasPermissions = AXIsProcessTrusted()
+        print("🔐 Accessibility permissions: \(hasPermissions)")
+        
+        if hasPermissions {
+            print("🔐 Starting hotkey monitoring")
+            hotkeyManager.startMonitoring()
+            
+        } else {
+            print("🔐 No permissions - will retry after permission request")
+            
+            // Start monitoring after a delay to allow permission granting
+            DispatchQueue.main.asyncAfter(deadline: .now() + 2.0) {
+                if AXIsProcessTrusted() {
+                    print("🔐 Permissions granted, starting monitoring")
+                    self.hotkeyManager.startMonitoring()
+                }
+            }
+            
+            // Keep checking for permissions periodically
+            Timer.scheduledTimer(withTimeInterval: 5.0, repeats: true) { timer in
+                if AXIsProcessTrusted() {
+                    print("🔐 Permissions granted after retry, starting monitoring")
+                    self.hotkeyManager.startMonitoring()
+                    timer.invalidate()
+                }
+            }
         }
-        if let eventHotKeyRef = eventHotKeyRef {
-            UnregisterEventHotKey(eventHotKeyRef)
+    }
+    
+    private var cancellables = Set<AnyCancellable>()
+    
+    private func checkAndRequestPermissions() {
+        if !permissionManager.isAccessibilityGranted {
+            print("Accessibility permissions not granted, requesting...")
+            permissionManager.requestPermissions()
+        } else {
+            print("✅ Accessibility permissions already granted")
+        }
+    }
+    
+    private func updateStatusMenu() {
+        guard let menu = statusItem?.menu else { return }
+        
+        // Update Chrome status
+        if let chromeItem = menu.items.first {
+            let isRunning = windowManager.isChromeRunning()
+            let windowCount = windowManager.getChromeWindowCount()
+            chromeItem.title = "Chrome: \(isRunning ? "Running (\(windowCount) windows)" : "Not Running")"
+        }
+        
+        // Update permission status
+        if menu.items.count > 3 {
+            let permissionItem = menu.items[3]
+            let hasPermissions = permissionManager.isAccessibilityGranted
+            permissionItem.title = "Permissions: \(hasPermissions ? "✅ Granted" : "❌ Required")"
+        }
+        
+        // Update status bar icon
+        let hasPermissions = permissionManager.isAccessibilityGranted
+        let chromeRunning = windowManager.isChromeRunning()
+        
+        if hasPermissions && chromeRunning {
+            statusItem?.button?.title = "⚡"
+        } else if hasPermissions {
+            statusItem?.button?.title = "🔧"
+        } else {
+            statusItem?.button?.title = "⚠️"
+        }
+    }
+    
+    // MARK: - Menu Actions
+    
+    @objc private func quit() {
+        NSApplication.shared.terminate(nil)
+    }
+    
+    @objc private func requestPermissions() {
+        permissionManager.requestPermissions()
+    }
+    
+    @objc private func testChromeCycling() {
+        Task {
+            do {
+                try await windowManager.activateAndCycleChrome()
+                print("✅ Chrome cycling test completed")
+            } catch {
+                print("❌ Chrome cycling test failed: \(error)")
+                
+                DispatchQueue.main.async {
+                    let alert = NSAlert()
+                    alert.messageText = "Chrome Cycling Failed"
+                    alert.informativeText = "Error: \(error.localizedDescription)"
+                    alert.alertStyle = .warning
+                    alert.runModal()
+                }
+            }
+        }
+    }
+}
+
+// MARK: - HotkeyManagerDelegate
+
+extension AppDelegate {
+    func hotkeyPressed() {
+        print("🔥 Hotkey pressed! Cycling Chrome windows...")
+        
+        Task {
+            do {
+                try await windowManager.activateAndCycleChrome()
+                print("✅ Chrome cycling completed successfully")
+            } catch {
+                print("❌ Chrome cycling failed: \(error)")
+            }
         }
     }
 }
