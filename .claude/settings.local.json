@@ -11,7 +11,12 @@
       "Bash(open:*)",
       "Bash(git restore:*)",
       "Bash(log stream:*)",
-      "Bash(python3:*)"
+      "Bash(python3:*)",
+      "Bash(osascript:*)",
+      "WebFetch(domain:developer.apple.com)",
+      "WebFetch(domain:stackoverflow.com)",
+      "Bash(security find-identity:*)",
+      "Bash(codesign:*)"
     ],
     "deny": []
   }
