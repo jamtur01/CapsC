@@ -10,6 +10,7 @@
 		1A466AF12E14E77300B146A9 /* PermissionManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1A466AEF2E14E77300B146A9 /* PermissionManager.swift */; };
 		1A466AF22E14E77300B146A9 /* WindowManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1A466AF02E14E77300B146A9 /* WindowManager.swift */; };
 		1A466AF32E14E77300B146A9 /* HotkeyManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1A466AEE2E14E77300B146A9 /* HotkeyManager.swift */; };
+		1AD5B43D2E215C080057B68A /* DebugConfig.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1AD5B43C2E215C080057B68A /* DebugConfig.swift */; };
 		4B1234567890ABCE /* AppDelegate.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4B1234567890ABCF /* AppDelegate.swift */; };
 		4B1234567890ABD0 /* ViewController.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4B1234567890ABD1 /* ViewController.swift */; };
 		4B1234567890ABD2 /* Main.storyboard in Resources */ = {isa = PBXBuildFile; fileRef = 4B1234567890ABD3 /* Main.storyboard */; };
@@ -21,6 +22,7 @@
 		1A466AEE2E14E77300B146A9 /* HotkeyManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HotkeyManager.swift; sourceTree = "<group>"; };
 		1A466AEF2E14E77300B146A9 /* PermissionManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PermissionManager.swift; sourceTree = "<group>"; };
 		1A466AF02E14E77300B146A9 /* WindowManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WindowManager.swift; sourceTree = "<group>"; };
+		1AD5B43C2E215C080057B68A /* DebugConfig.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DebugConfig.swift; sourceTree = "<group>"; };
 		4B1234567890ABCB /* CapsC.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = CapsC.app; sourceTree = BUILT_PRODUCTS_DIR; };
 		4B1234567890ABCF /* AppDelegate.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppDelegate.swift; sourceTree = "<group>"; };
 		4B1234567890ABD1 /* ViewController.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ViewController.swift; sourceTree = "<group>"; };
@@ -66,6 +68,7 @@
 				1A466AEE2E14E77300B146A9 /* HotkeyManager.swift */,
 				1A466AEF2E14E77300B146A9 /* PermissionManager.swift */,
 				1A466AF02E14E77300B146A9 /* WindowManager.swift */,
+				1AD5B43C2E215C080057B68A /* DebugConfig.swift */,
 				4B1234567890ABD1 /* ViewController.swift */,
 				4B1234567890ABD3 /* Main.storyboard */,
 				4B1234567890ABD4 /* Assets.xcassets */,
@@ -151,6 +154,7 @@
 				4B1234567890ABD0 /* ViewController.swift in Sources */,
 				4B1234567890ABCE /* AppDelegate.swift in Sources */,
 				1A466AF12E14E77300B146A9 /* PermissionManager.swift in Sources */,
+				1AD5B43D2E215C080057B68A /* DebugConfig.swift in Sources */,
 				1A466AF22E14E77300B146A9 /* WindowManager.swift in Sources */,
 				1A466AF32E14E77300B146A9 /* HotkeyManager.swift in Sources */,
 			);
@@ -284,9 +288,9 @@
 				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
 				CODE_SIGN_ENTITLEMENTS = CapsC/CapsC.entitlements;
 				CODE_SIGN_STYLE = Automatic;
-				DEVELOPMENT_TEAM = 9NTLX39L64;
 				COMBINE_HIDPI_IMAGES = YES;
 				CURRENT_PROJECT_VERSION = 1;
+				DEVELOPMENT_TEAM = 9NTLX39L64;
 				GENERATE_INFOPLIST_FILE = YES;
 				INFOPLIST_FILE = CapsC/Info.plist;
 				INFOPLIST_KEY_NSHumanReadableCopyright = "";
@@ -311,9 +315,9 @@
 				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
 				CODE_SIGN_ENTITLEMENTS = CapsC/CapsC.entitlements;
 				CODE_SIGN_STYLE = Automatic;
-				DEVELOPMENT_TEAM = 9NTLX39L64;
 				COMBINE_HIDPI_IMAGES = YES;
 				CURRENT_PROJECT_VERSION = 1;
+				DEVELOPMENT_TEAM = 9NTLX39L64;
 				GENERATE_INFOPLIST_FILE = YES;
 				INFOPLIST_FILE = CapsC/Info.plist;
 				INFOPLIST_KEY_NSHumanReadableCopyright = "";

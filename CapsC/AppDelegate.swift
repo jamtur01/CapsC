@@ -16,7 +16,7 @@ class AppDelegate: NSObject, NSApplicationDelegate, HotkeyManagerDelegate {
     
     override init() {
         super.init()
-        print("=== CapsC AppDelegate init ===")
+        DebugConfig.log("AppDelegate", "=== CapsC AppDelegate init ===")
     }
     
     static func main() {
@@ -27,24 +27,24 @@ class AppDelegate: NSObject, NSApplicationDelegate, HotkeyManagerDelegate {
     }
     
     func applicationDidFinishLaunching(_ aNotification: Notification) {
-        print("=== CapsC launching ===")
+        DebugConfig.log("AppDelegate", "=== CapsC launching ===")
         
         setupStatusItem()
         setupHotkeyManager()
         checkAndRequestPermissions()
         
-        print("=== CapsC launched successfully ===")
+        DebugConfig.log("AppDelegate", "=== CapsC launched successfully ===")
     }
     
     func applicationWillTerminate(_ aNotification: Notification) {
-        print("=== CapsC terminating ===")
+        DebugConfig.log("AppDelegate", "=== CapsC terminating ===")
         hotkeyManager.stopMonitoring()
     }
     
     // MARK: - Setup Methods
     
     private func setupStatusItem() {
-        print("Setting up status item...")
+        DebugConfig.log("AppDelegate", "Setting up status item...")
         statusItem = NSStatusBar.system.statusItem(withLength: NSStatusItem.squareLength)
         statusItem?.button?.title = "⚡"
         
@@ -83,7 +83,7 @@ class AppDelegate: NSObject, NSApplicationDelegate, HotkeyManagerDelegate {
             self.updateStatusMenu()
         }
         
-        print("Status item setup complete")
+        DebugConfig.log("AppDelegate", "Status item setup complete")
     }
     
     private func setupHotkeyManager() {
@@ -91,19 +91,19 @@ class AppDelegate: NSObject, NSApplicationDelegate, HotkeyManagerDelegate {
         
         // Simplified permission check (like old implementation)
         let hasPermissions = AXIsProcessTrusted()
-        print("🔐 Accessibility permissions: \(hasPermissions)")
+        DebugConfig.log("AppDelegate", "🔐 Accessibility permissions: \(hasPermissions)")
         
         if hasPermissions {
-            print("🔐 Starting hotkey monitoring")
+            DebugConfig.log("AppDelegate", "🔐 Starting hotkey monitoring")
             hotkeyManager.startMonitoring()
             
         } else {
-            print("🔐 No permissions - will retry after permission request")
+            DebugConfig.log("AppDelegate", "🔐 No permissions - will retry after permission request")
             
             // Start monitoring after a delay to allow permission granting
             DispatchQueue.main.asyncAfter(deadline: .now() + 2.0) {
                 if AXIsProcessTrusted() {
-                    print("🔐 Permissions granted, starting monitoring")
+                    DebugConfig.log("AppDelegate", "🔐 Permissions granted, starting monitoring")
                     self.hotkeyManager.startMonitoring()
                 }
             }
@@ -111,7 +111,7 @@ class AppDelegate: NSObject, NSApplicationDelegate, HotkeyManagerDelegate {
             // Keep checking for permissions periodically
             Timer.scheduledTimer(withTimeInterval: 5.0, repeats: true) { timer in
                 if AXIsProcessTrusted() {
-                    print("🔐 Permissions granted after retry, starting monitoring")
+                    DebugConfig.log("AppDelegate", "🔐 Permissions granted after retry, starting monitoring")
                     self.hotkeyManager.startMonitoring()
                     timer.invalidate()
                 }
@@ -123,10 +123,10 @@ class AppDelegate: NSObject, NSApplicationDelegate, HotkeyManagerDelegate {
     
     private func checkAndRequestPermissions() {
         if !permissionManager.isAccessibilityGranted {
-            print("Accessibility permissions not granted, requesting...")
+            DebugConfig.log("AppDelegate", "Accessibility permissions not granted, requesting...")
             permissionManager.requestPermissions()
         } else {
-            print("✅ Accessibility permissions already granted")
+            DebugConfig.log("AppDelegate", "✅ Accessibility permissions already granted")
         }
     }
     
@@ -174,9 +174,9 @@ class AppDelegate: NSObject, NSApplicationDelegate, HotkeyManagerDelegate {
         Task {
             do {
                 try await windowManager.activateAndCycleChrome()
-                print("✅ Chrome cycling test completed")
+                DebugConfig.log("AppDelegate", "✅ Chrome cycling test completed")
             } catch {
-                print("❌ Chrome cycling test failed: \(error)")
+                DebugConfig.log("AppDelegate", "❌ Chrome cycling test failed: \(error)")
                 
                 DispatchQueue.main.async {
                     let alert = NSAlert()
@@ -194,14 +194,14 @@ class AppDelegate: NSObject, NSApplicationDelegate, HotkeyManagerDelegate {
 
 extension AppDelegate {
     func hotkeyPressed() {
-        print("🔥 Hotkey pressed! Cycling Chrome windows...")
+        DebugConfig.log("AppDelegate", "🔥 Hotkey pressed! Cycling Chrome windows...")
         
         Task {
             do {
                 try await windowManager.activateAndCycleChrome()
-                print("✅ Chrome cycling completed successfully")
+                DebugConfig.log("AppDelegate", "✅ Chrome cycling completed successfully")
             } catch {
-                print("❌ Chrome cycling failed: \(error)")
+                DebugConfig.log("AppDelegate", "❌ Chrome cycling failed: \(error)")
             }
         }
     }

@@ -29,7 +29,9 @@ class HotkeyManager: NSObject {
     
     override init() {
         super.init()
-        logger.info("🔧 HotkeyManager initialized")
+        if DebugConfig.debugMode {
+            logger.info("🔧 HotkeyManager initialized")
+        }
     }
     
     deinit {
@@ -37,14 +39,20 @@ class HotkeyManager: NSObject {
     }
     
     func startMonitoring() {
-        logger.info("🎯 Starting hotkey monitoring...")
+        if DebugConfig.debugMode {
+            logger.info("🎯 Starting hotkey monitoring...")
+        }
         
         // Check accessibility permissions
         let trusted = AXIsProcessTrusted()
-        logger.info("📱 AXIsProcessTrusted: \(trusted)")
+        if DebugConfig.debugMode {
+            logger.info("📱 AXIsProcessTrusted: \(trusted)")
+        }
         
         guard trusted else {
-            logger.error("❌ Accessibility permissions not granted")
+            if DebugConfig.debugMode {
+                logger.error("❌ Accessibility permissions not granted")
+            }
             return
         }
         
@@ -61,7 +69,9 @@ class HotkeyManager: NSObject {
     }
     
     func stopMonitoring() {
-        logger.info("🛑 Stopping hotkey monitoring...")
+        if DebugConfig.debugMode {
+            logger.info("🛑 Stopping hotkey monitoring...")
+        }
         
         stopNSEventMonitoring()
         stopCarbonHotKey()
@@ -69,13 +79,17 @@ class HotkeyManager: NSObject {
         
         self.commandKeyPressed = false
         
-        logger.info("✅ Hotkey monitoring stopped")
+        if DebugConfig.debugMode {
+            logger.info("✅ Hotkey monitoring stopped")
+        }
     }
     
     // MARK: - NSEvent Global Monitor Approach
     
     private func startNSEventMonitoring() {
-        logger.info("🔧 Starting NSEvent global monitor...")
+        if DebugConfig.debugMode {
+            logger.info("🔧 Starting NSEvent global monitor...")
+        }
         
         // Monitor for key down events globally
         self.globalEventMonitor = NSEvent.addGlobalMonitorForEvents(
@@ -85,13 +99,19 @@ class HotkeyManager: NSObject {
                 
                 if event.type == .flagsChanged {
                     self.commandKeyPressed = event.modifierFlags.contains(.command)
-                    logger.debug("🚩 NSEvent: Command key \(self.commandKeyPressed ? "pressed" : "released")")
+                    if DebugConfig.debugMode {
+                        logger.debug("🚩 NSEvent: Command key \(self.commandKeyPressed ? "pressed" : "released")")
+                    }
                 } else if event.type == .keyDown {
-                    logger.debug("🔍 NSEvent: keyDown - keyCode=\(event.keyCode), chars=\(event.characters ?? "nil")")
+                    if DebugConfig.debugMode {
+                        logger.debug("🔍 NSEvent: keyDown - keyCode=\(event.keyCode), chars=\(event.characters ?? "nil")")
+                    }
                     
                     // Check for Command-U
                     if event.keyCode == 32 && event.modifierFlags.contains(.command) {
-                        logger.info("🔥 NSEvent: Command-U detected!")
+                        if DebugConfig.debugMode {
+                            logger.info("🔥 NSEvent: Command-U detected!")
+                        }
                         DispatchQueue.main.async {
                             self.delegate?.hotkeyPressed()
                         }
@@ -100,9 +120,13 @@ class HotkeyManager: NSObject {
             })
         
         if globalEventMonitor != nil {
-            logger.info("✅ NSEvent global monitor started")
+            if DebugConfig.debugMode {
+                logger.info("✅ NSEvent global monitor started")
+            }
         } else {
-            logger.warning("⚠️ Failed to start NSEvent global monitor")
+            if DebugConfig.debugMode {
+                logger.warning("⚠️ Failed to start NSEvent global monitor")
+            }
         }
     }
     
@@ -120,7 +144,9 @@ class HotkeyManager: NSObject {
     // MARK: - Carbon Events Approach (Most Reliable)
     
     private func startCarbonHotKey() {
-        logger.info("🔧 Starting Carbon hotkey...")
+        if DebugConfig.debugMode {
+            logger.info("🔧 Starting Carbon hotkey...")
+        }
         
         // Command-U: keyCode 32, cmdKey modifier
         let keyCode: UInt32 = 32  // U key
@@ -136,7 +162,9 @@ class HotkeyManager: NSObject {
         
         // Install event handler
         let handler: EventHandlerUPP = { (nextHandler, theEvent, userData) -> OSStatus in
-            logger.info("🔥 Carbon: Command-U hotkey pressed!")
+            if DebugConfig.debugMode {
+                logger.info("🔥 Carbon: Command-U hotkey pressed!")
+            }
             
             if let manager = userData {
                 let self_ = Unmanaged<HotkeyManager>.fromOpaque(manager).takeUnretainedValue()
@@ -155,9 +183,13 @@ class HotkeyManager: NSObject {
         let status = RegisterEventHotKey(keyCode, modifierFlags, hotKeyID, GetApplicationEventTarget(), 0, &hotKeyRef)
         
         if status == noErr {
-            logger.info("✅ Carbon hotkey registered successfully")
+            if DebugConfig.debugMode {
+                logger.info("✅ Carbon hotkey registered successfully")
+            }
         } else {
-            logger.error("❌ Failed to register Carbon hotkey: \(status)")
+            if DebugConfig.debugMode {
+                logger.error("❌ Failed to register Carbon hotkey: \(status)")
+            }
         }
     }
     
@@ -171,7 +203,9 @@ class HotkeyManager: NSObject {
     // MARK: - CGEventTap Approach (Fallback)
     
     private func startCGEventTap() {
-        logger.info("🔧 Starting CGEventTap...")
+        if DebugConfig.debugMode {
+            logger.info("🔧 Starting CGEventTap...")
+        }
         
         let eventMask = CGEventMask(
             (1 << CGEventType.keyDown.rawValue) |
@@ -208,7 +242,9 @@ class HotkeyManager: NSObject {
                 CFRunLoopAddSource(CFRunLoopGetCurrent(), runLoopSource, .commonModes)
                 CGEvent.tapEnable(tap: tap, enable: true)
                 
-                logger.info("✅ CGEventTap created at location: \(name)")
+                if DebugConfig.debugMode {
+                    logger.info("✅ CGEventTap created at location: \(name)")
+                }
                 break
             }
         }
@@ -238,7 +274,9 @@ class HotkeyManager: NSObject {
         let keyCode = event.getIntegerValueField(.keyboardEventKeycode)
         let flags = event.flags
         
-        logger.debug("📍 CGEvent: type=\(type.rawValue), keyCode=\(keyCode), flags=\(flags.rawValue)")
+        if DebugConfig.debugMode {
+            logger.debug("📍 CGEvent: type=\(type.rawValue), keyCode=\(keyCode), flags=\(flags.rawValue)")
+        }
         
         switch type {
         case .flagsChanged:
@@ -246,7 +284,9 @@ class HotkeyManager: NSObject {
             
         case .keyDown:
             if keyCode == 32 && self.commandKeyPressed {
-                logger.info("🔥 CGEvent: Command-U detected!")
+                if DebugConfig.debugMode {
+                    logger.info("🔥 CGEvent: Command-U detected!")
+                }
                 DispatchQueue.main.async { [weak self] in
                     self?.delegate?.hotkeyPressed()
                 }
