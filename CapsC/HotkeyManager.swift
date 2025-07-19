@@ -1,7 +1,6 @@
 import Cocoa
-import CoreGraphics
-import OSLog
 import Carbon
+import OSLog
 
 private let logger = Logger(subsystem: "net.kartar.CapsC", category: "HotkeyManager")
 
@@ -13,19 +12,9 @@ class HotkeyManager: NSObject {
     
     weak var delegate: HotkeyManagerDelegate?
     
-    // CGEvent tap approach
-    private var eventTap: CFMachPort?
-    private var runLoopSource: CFRunLoopSource?
-    
-    // NSEvent monitor approach
-    private var globalEventMonitor: Any?
-    private var localEventMonitor: Any?
-    
-    // Carbon hotkey approach
+    // Carbon hotkey approach (most reliable for menu bar apps)
     private var hotKeyRef: EventHotKeyRef?
-    
-    // Track Command key state
-    private var commandKeyPressed = false
+    private var eventHandler: EventHandlerRef?
     
     override init() {
         super.init()
@@ -56,16 +45,8 @@ class HotkeyManager: NSObject {
             return
         }
         
-        // Try multiple approaches in order of preference
-        
-        // 1. First try NSEvent global monitor (works well for menu bar apps)
-        startNSEventMonitoring()
-        
-        // 2. Then try Carbon Events as a more reliable fallback
+        // Use Carbon Events as the single, reliable approach
         startCarbonHotKey()
-        
-        // 3. Finally try CGEventTap (might only get modifier keys)
-        startCGEventTap()
     }
     
     func stopMonitoring() {
@@ -73,75 +54,14 @@ class HotkeyManager: NSObject {
             logger.info("🛑 Stopping hotkey monitoring...")
         }
         
-        stopNSEventMonitoring()
         stopCarbonHotKey()
-        stopCGEventTap()
-        
-        self.commandKeyPressed = false
         
         if DebugConfig.debugMode {
             logger.info("✅ Hotkey monitoring stopped")
         }
     }
     
-    // MARK: - NSEvent Global Monitor Approach
-    
-    private func startNSEventMonitoring() {
-        if DebugConfig.debugMode {
-            logger.info("🔧 Starting NSEvent global monitor...")
-        }
-        
-        // Monitor for key down events globally
-        self.globalEventMonitor = NSEvent.addGlobalMonitorForEvents(
-            matching: NSEvent.EventTypeMask([.keyDown, .flagsChanged]),
-            handler: { [weak self] (event: NSEvent) in
-                guard let self = self else { return }
-                
-                if event.type == .flagsChanged {
-                    self.commandKeyPressed = event.modifierFlags.contains(.command)
-                    if DebugConfig.debugMode {
-                        logger.debug("🚩 NSEvent: Command key \(self.commandKeyPressed ? "pressed" : "released")")
-                    }
-                } else if event.type == .keyDown {
-                    if DebugConfig.debugMode {
-                        logger.debug("🔍 NSEvent: keyDown - keyCode=\(event.keyCode), chars=\(event.characters ?? "nil")")
-                    }
-                    
-                    // Check for Command-U
-                    if event.keyCode == 32 && event.modifierFlags.contains(.command) {
-                        if DebugConfig.debugMode {
-                            logger.info("🔥 NSEvent: Command-U detected!")
-                        }
-                        DispatchQueue.main.async {
-                            self.delegate?.hotkeyPressed()
-                        }
-                    }
-                }
-            })
-        
-        if globalEventMonitor != nil {
-            if DebugConfig.debugMode {
-                logger.info("✅ NSEvent global monitor started")
-            }
-        } else {
-            if DebugConfig.debugMode {
-                logger.warning("⚠️ Failed to start NSEvent global monitor")
-            }
-        }
-    }
-    
-    private func stopNSEventMonitoring() {
-        if let monitor = globalEventMonitor {
-            NSEvent.removeMonitor(monitor)
-            globalEventMonitor = nil
-        }
-        if let monitor = localEventMonitor {
-            NSEvent.removeMonitor(monitor)
-            localEventMonitor = nil
-        }
-    }
-    
-    // MARK: - Carbon Events Approach (Most Reliable)
+    // MARK: - Carbon Events Approach
     
     private func startCarbonHotKey() {
         if DebugConfig.debugMode {
@@ -157,10 +77,9 @@ class HotkeyManager: NSObject {
         hotKeyID.signature = OSType("CAPC".fourCharCodeValue)
         hotKeyID.id = 1
         
-        // Register the hotkey
+        // Install event handler
         var eventType = EventTypeSpec(eventClass: OSType(kEventClassKeyboard), eventKind: OSType(kEventHotKeyPressed))
         
-        // Install event handler
         let handler: EventHandlerUPP = { (nextHandler, theEvent, userData) -> OSStatus in
             if DebugConfig.debugMode {
                 logger.info("🔥 Carbon: Command-U hotkey pressed!")
@@ -176,19 +95,39 @@ class HotkeyManager: NSObject {
             return noErr
         }
         
-        var eventHandler: EventHandlerRef?
-        InstallEventHandler(GetApplicationEventTarget(), handler, 1, &eventType, Unmanaged.passUnretained(self).toOpaque(), &eventHandler)
+        let status = InstallEventHandler(
+            GetApplicationEventTarget(),
+            handler,
+            1,
+            &eventType,
+            Unmanaged.passUnretained(self).toOpaque(),
+            &eventHandler
+        )
+        
+        if status != noErr {
+            if DebugConfig.debugMode {
+                logger.error("❌ Failed to install event handler: \(status)")
+            }
+            return
+        }
         
         // Register the hotkey
-        let status = RegisterEventHotKey(keyCode, modifierFlags, hotKeyID, GetApplicationEventTarget(), 0, &hotKeyRef)
+        let registerStatus = RegisterEventHotKey(
+            keyCode,
+            modifierFlags,
+            hotKeyID,
+            GetApplicationEventTarget(),
+            0,
+            &hotKeyRef
+        )
         
-        if status == noErr {
+        if registerStatus == noErr {
             if DebugConfig.debugMode {
                 logger.info("✅ Carbon hotkey registered successfully")
             }
         } else {
             if DebugConfig.debugMode {
-                logger.error("❌ Failed to register Carbon hotkey: \(status)")
+                logger.error("❌ Failed to register Carbon hotkey: \(registerStatus)")
             }
         }
     }
@@ -198,106 +137,11 @@ class HotkeyManager: NSObject {
             UnregisterEventHotKey(hotKey)
             hotKeyRef = nil
         }
-    }
-    
-    // MARK: - CGEventTap Approach (Fallback)
-    
-    private func startCGEventTap() {
-        if DebugConfig.debugMode {
-            logger.info("🔧 Starting CGEventTap...")
+        
+        if let handler = eventHandler {
+            RemoveEventHandler(handler)
+            eventHandler = nil
         }
-        
-        let eventMask = CGEventMask(
-            (1 << CGEventType.keyDown.rawValue) |
-            (1 << CGEventType.keyUp.rawValue) |
-            (1 << CGEventType.flagsChanged.rawValue)
-        )
-        
-        let callback: CGEventTapCallBack = { proxy, type, event, userInfo in
-            let manager = Unmanaged<HotkeyManager>.fromOpaque(userInfo!).takeUnretainedValue()
-            return manager.handleCGEvent(proxy: proxy, type: type, event: event)
-        }
-        
-        // Try different tap locations
-        let tapLocations: [(CGEventTapLocation, String)] = [
-            (.cgAnnotatedSessionEventTap, "Annotated Session"),
-            (.cgSessionEventTap, "Session"),
-            (.cghidEventTap, "HID")
-        ]
-        
-        for (location, name) in tapLocations {
-            if let tap = CGEvent.tapCreate(
-                tap: location,
-                place: .headInsertEventTap,
-                options: .defaultTap,
-                eventsOfInterest: eventMask,
-                callback: callback,
-                userInfo: Unmanaged.passUnretained(self).toOpaque()
-            ) {
-                self.eventTap = tap
-                
-                let runLoopSource = CFMachPortCreateRunLoopSource(kCFAllocatorDefault, tap, 0)
-                self.runLoopSource = runLoopSource
-                
-                CFRunLoopAddSource(CFRunLoopGetCurrent(), runLoopSource, .commonModes)
-                CGEvent.tapEnable(tap: tap, enable: true)
-                
-                if DebugConfig.debugMode {
-                    logger.info("✅ CGEventTap created at location: \(name)")
-                }
-                break
-            }
-        }
-    }
-    
-    private func stopCGEventTap() {
-        if let tap = eventTap {
-            CGEvent.tapEnable(tap: tap, enable: false)
-        }
-        
-        if let source = runLoopSource {
-            CFRunLoopRemoveSource(CFRunLoopGetCurrent(), source, .commonModes)
-        }
-        
-        self.eventTap = nil
-        self.runLoopSource = nil
-    }
-    
-    private func handleCGEvent(proxy: CGEventTapProxy?, type: CGEventType, event: CGEvent) -> Unmanaged<CGEvent>? {
-        if type == .tapDisabledByTimeout || type == .tapDisabledByUserInput {
-            if let tap = self.eventTap {
-                CGEvent.tapEnable(tap: tap, enable: true)
-            }
-            return Unmanaged.passUnretained(event)
-        }
-        
-        let keyCode = event.getIntegerValueField(.keyboardEventKeycode)
-        let flags = event.flags
-        
-        if DebugConfig.debugMode {
-            logger.debug("📍 CGEvent: type=\(type.rawValue), keyCode=\(keyCode), flags=\(flags.rawValue)")
-        }
-        
-        switch type {
-        case .flagsChanged:
-            self.commandKeyPressed = flags.contains(.maskCommand)
-            
-        case .keyDown:
-            if keyCode == 32 && self.commandKeyPressed {
-                if DebugConfig.debugMode {
-                    logger.info("🔥 CGEvent: Command-U detected!")
-                }
-                DispatchQueue.main.async { [weak self] in
-                    self?.delegate?.hotkeyPressed()
-                }
-                return nil
-            }
-            
-        default:
-            break
-        }
-        
-        return Unmanaged.passUnretained(event)
     }
 }
 

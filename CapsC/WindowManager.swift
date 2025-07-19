@@ -35,6 +35,7 @@ class WindowManager {
         }
         
         let app = AXUIElementCreateApplication(chromePID)
+        
         var windowsRef: CFTypeRef?
         let result = AXUIElementCopyAttributeValue(app, kAXWindowsAttribute as CFString, &windowsRef)
         
@@ -192,27 +193,22 @@ class WindowManager {
         DebugConfig.log("WindowManager", "🎯 Attempting to bring window '\(window.title)' to front...")
         return try await withCheckedThrowingContinuation { continuation in
             DispatchQueue.main.async {
-                do {
-                    if let app = NSRunningApplication(processIdentifier: window.ownerPID) {
-                        DebugConfig.log("WindowManager", "✅ Found Chrome app for PID \(window.ownerPID)")
-                        app.activate(options: [.activateAllWindows])
-                        
-                        DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) {
-                            if self.focusWindowUsingAccessibility(window) {
-                                DebugConfig.log("WindowManager", "✅ Successfully focused window")
-                                continuation.resume()
-                            } else {
-                                DebugConfig.log("WindowManager", "❌ Failed to focus window using Accessibility API")
-                                continuation.resume(throwing: NSError(domain: "WindowManagerError", code: -3, userInfo: [NSLocalizedDescriptionKey: "Failed to focus window using Accessibility API"]))
-                            }
+                if let app = NSRunningApplication(processIdentifier: window.ownerPID) {
+                    DebugConfig.log("WindowManager", "✅ Found Chrome app for PID \(window.ownerPID)")
+                    app.activate(options: [.activateAllWindows])
+                    
+                    DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) {
+                        if self.focusWindowUsingAccessibility(window) {
+                            DebugConfig.log("WindowManager", "✅ Successfully focused window")
+                            continuation.resume()
+                        } else {
+                            DebugConfig.log("WindowManager", "❌ Failed to focus window using Accessibility API")
+                            continuation.resume(throwing: NSError(domain: "WindowManagerError", code: -3, userInfo: [NSLocalizedDescriptionKey: "Failed to focus window using Accessibility API"]))
                         }
-                    } else {
-                        DebugConfig.log("WindowManager", "❌ Failed to find Chrome application for PID \(window.ownerPID)")
-                        continuation.resume(throwing: NSError(domain: "WindowManagerError", code: -2, userInfo: [NSLocalizedDescriptionKey: "Failed to find Chrome application"]))
                     }
-                } catch {
-                    DebugConfig.log("WindowManager", "❌ Error in bringWindowToFront: \(error)")
-                    continuation.resume(throwing: error)
+                } else {
+                    DebugConfig.log("WindowManager", "❌ Failed to find Chrome application for PID \(window.ownerPID)")
+                    continuation.resume(throwing: NSError(domain: "WindowManagerError", code: -2, userInfo: [NSLocalizedDescriptionKey: "Failed to find Chrome application"]))
                 }
             }
         }

@@ -12,6 +12,10 @@ class AppDelegate: NSObject, NSApplicationDelegate, HotkeyManagerDelegate {
     // MARK: - UI Components
     private var statusItem: NSStatusItem?
     
+    // MARK: - Timers
+    private var statusUpdateTimer: Timer?
+    private var permissionCheckTimer: Timer?
+    
     // MARK: - Lifecycle
     
     override init() {
@@ -38,6 +42,12 @@ class AppDelegate: NSObject, NSApplicationDelegate, HotkeyManagerDelegate {
     
     func applicationWillTerminate(_ aNotification: Notification) {
         DebugConfig.log("AppDelegate", "=== CapsC terminating ===")
+        
+        // Clean up timers
+        statusUpdateTimer?.invalidate()
+        permissionCheckTimer?.invalidate()
+        
+        // Stop hotkey monitoring
         hotkeyManager.stopMonitoring()
     }
     
@@ -78,8 +88,8 @@ class AppDelegate: NSObject, NSApplicationDelegate, HotkeyManagerDelegate {
         
         statusItem?.menu = menu
         
-        // Update status periodically
-        Timer.scheduledTimer(withTimeInterval: 2.0, repeats: true) { _ in
+        // Single consolidated update timer
+        statusUpdateTimer = Timer.scheduledTimer(withTimeInterval: 2.0, repeats: true) { _ in
             self.updateStatusMenu()
         }
         
@@ -89,32 +99,33 @@ class AppDelegate: NSObject, NSApplicationDelegate, HotkeyManagerDelegate {
     private func setupHotkeyManager() {
         hotkeyManager.delegate = self
         
-        // Simplified permission check (like old implementation)
         let hasPermissions = AXIsProcessTrusted()
         DebugConfig.log("AppDelegate", "🔐 Accessibility permissions: \(hasPermissions)")
         
         if hasPermissions {
             DebugConfig.log("AppDelegate", "🔐 Starting hotkey monitoring")
             hotkeyManager.startMonitoring()
-            
         } else {
-            DebugConfig.log("AppDelegate", "🔐 No permissions - will retry after permission request")
-            
-            // Start monitoring after a delay to allow permission granting
-            DispatchQueue.main.asyncAfter(deadline: .now() + 2.0) {
-                if AXIsProcessTrusted() {
-                    DebugConfig.log("AppDelegate", "🔐 Permissions granted, starting monitoring")
-                    self.hotkeyManager.startMonitoring()
-                }
-            }
-            
-            // Keep checking for permissions periodically
-            Timer.scheduledTimer(withTimeInterval: 5.0, repeats: true) { timer in
-                if AXIsProcessTrusted() {
-                    DebugConfig.log("AppDelegate", "🔐 Permissions granted after retry, starting monitoring")
-                    self.hotkeyManager.startMonitoring()
-                    timer.invalidate()
-                }
+            DebugConfig.log("AppDelegate", "🔐 No permissions - will check periodically")
+            startPermissionCheckTimer()
+        }
+    }
+    
+    private func startPermissionCheckTimer() {
+        // Stop any existing timer
+        permissionCheckTimer?.invalidate()
+        
+        // Check for permissions periodically
+        permissionCheckTimer = Timer.scheduledTimer(withTimeInterval: 3.0, repeats: true) { timer in
+            if AXIsProcessTrusted() {
+                DebugConfig.log("AppDelegate", "🔐 Permissions granted, starting monitoring")
+                self.hotkeyManager.startMonitoring()
+                timer.invalidate()
+                self.permissionCheckTimer = nil
+                
+                // Show success notification
+                self.showNotification(title: "CapsC Ready", 
+                                    message: "Hotkey monitoring is now active. Press ⌘U to cycle Chrome windows.")
             }
         }
     }
@@ -125,6 +136,16 @@ class AppDelegate: NSObject, NSApplicationDelegate, HotkeyManagerDelegate {
         if !permissionManager.isAccessibilityGranted {
             DebugConfig.log("AppDelegate", "Accessibility permissions not granted, requesting...")
             permissionManager.requestPermissions()
+            
+            // Show informative alert
+            DispatchQueue.main.async {
+                let alert = NSAlert()
+                alert.messageText = "CapsC Needs Accessibility Access"
+                alert.informativeText = "To enable window cycling with ⌘U, please grant accessibility permissions in System Settings.\n\nAfter granting permission, CapsC will automatically start monitoring."
+                alert.alertStyle = .informational
+                alert.addButton(withTitle: "OK")
+                alert.runModal()
+            }
         } else {
             DebugConfig.log("AppDelegate", "✅ Accessibility permissions already granted")
         }
@@ -147,16 +168,41 @@ class AppDelegate: NSObject, NSApplicationDelegate, HotkeyManagerDelegate {
             permissionItem.title = "Permissions: \(hasPermissions ? "✅ Granted" : "❌ Required")"
         }
         
-        // Update status bar icon
+        // Update status bar icon based on state
+        updateStatusIcon()
+    }
+    
+    private func updateStatusIcon() {
         let hasPermissions = permissionManager.isAccessibilityGranted
         let chromeRunning = windowManager.isChromeRunning()
         
         if hasPermissions && chromeRunning {
-            statusItem?.button?.title = "⚡"
+            statusItem?.button?.title = "⚡"  // Ready
         } else if hasPermissions {
-            statusItem?.button?.title = "🔧"
+            statusItem?.button?.title = "🔧"  // No Chrome
         } else {
-            statusItem?.button?.title = "⚠️"
+            statusItem?.button?.title = "⚠️"   // No permissions
+        }
+    }
+    
+    private func showNotification(title: String, message: String) {
+        let notification = NSUserNotification()
+        notification.title = title
+        notification.informativeText = message
+        notification.soundName = NSUserNotificationDefaultSoundName
+        NSUserNotificationCenter.default.deliver(notification)
+    }
+    
+    private func showError(_ error: Error, context: String) {
+        DebugConfig.log("AppDelegate", "❌ \(context): \(error)")
+        
+        DispatchQueue.main.async {
+            let alert = NSAlert()
+            alert.messageText = "Error: \(context)"
+            alert.informativeText = error.localizedDescription
+            alert.alertStyle = .warning
+            alert.addButton(withTitle: "OK")
+            alert.runModal()
         }
     }
     
@@ -176,15 +222,7 @@ class AppDelegate: NSObject, NSApplicationDelegate, HotkeyManagerDelegate {
                 try await windowManager.activateAndCycleChrome()
                 DebugConfig.log("AppDelegate", "✅ Chrome cycling test completed")
             } catch {
-                DebugConfig.log("AppDelegate", "❌ Chrome cycling test failed: \(error)")
-                
-                DispatchQueue.main.async {
-                    let alert = NSAlert()
-                    alert.messageText = "Chrome Cycling Failed"
-                    alert.informativeText = "Error: \(error.localizedDescription)"
-                    alert.alertStyle = .warning
-                    alert.runModal()
-                }
+                showError(error, context: "Chrome Cycling Test")
             }
         }
     }
@@ -201,17 +239,19 @@ extension AppDelegate {
                 try await windowManager.activateAndCycleChrome()
                 DebugConfig.log("AppDelegate", "✅ Chrome cycling completed successfully")
             } catch {
+                // For hotkey actions, show a less intrusive notification instead of alert
+                let errorMessage: String
+                if !windowManager.isChromeRunning() {
+                    errorMessage = "Chrome is not running"
+                } else if windowManager.getChromeWindowCount() == 0 {
+                    errorMessage = "No Chrome windows found"
+                } else {
+                    errorMessage = error.localizedDescription
+                }
+                
+                showNotification(title: "Window Cycling Failed", message: errorMessage)
                 DebugConfig.log("AppDelegate", "❌ Chrome cycling failed: \(error)")
             }
         }
     }
-}
-
-func fourCharCode(_ string: String) -> FourCharCode {
-    assert(string.count == 4, "String must be exactly 4 characters")
-    var result: FourCharCode = 0
-    for char in string.utf16 {
-        result = (result << 8) + FourCharCode(char)
-    }
-    return result
 }
